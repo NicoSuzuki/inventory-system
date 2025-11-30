@@ -12,10 +12,10 @@ app.use(express.json())
 app.get('/', (req, res) => { res.send('API is up and running') })
 
 const productsRouter = require('./routes/products');
-// const usersRouter = require('./routes/users');
+const usersRouter = require('./routes/users');
 
 app.use('/api/products', productsRouter);
-// app.use('/api/users', usersRouter);
+app.use('/api/users', usersRouter);
 
 app.use((req, res, next) => {
   res.status(404).json({ error: 'Not Found' });
