@@ -35,24 +35,24 @@ This is a Node.js + Express + MySQL backend project where I’m building an Inve
 ## 📦 How to run
 
 1️⃣ Clone the repository
-  bash
-  git clone https://github.com/NicoSuzuki/inventory-system.git
-  cd inventory-system
+  -bash
+  -git clone https://github.com/NicoSuzuki/inventory-system.git
+  -cd inventory-system
 
 2️⃣ Install dependencies
-  bash
-  npm install
+  -bash
+  -npm install
 
 3️⃣ Create a .env file in the root folder
-  DB_HOST=localhost
-  DB_USER=your_user
-  DB_PASSWORD=your_password
-  DB_NAME=inventory_db
-  DB_PORT=3306
-  PORT=3000
+  -DB_HOST=localhost
+  -DB_USER=your_user
+  -DB_PASSWORD=your_password
+  -DB_NAME=inventory_db
+  -DB_PORT=3306
+  -PORT=3000
 
 4️⃣ Start the development server
-  npm run dev
+  -npm run dev
 
 5️⃣ API will be running at
-  http://localhost:3000
+  -http://localhost:3000
