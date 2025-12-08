@@ -13,7 +13,9 @@ app.get('/', (req, res) => { res.send('API is up and running') })
 
 const productsRouter = require('./routes/products');
 const usersRouter = require('./routes/users');
+const authRouter = require('./routes/auth');
 
+app.use('/api/auth', authRouter);
 app.use('/api/products', productsRouter);
 app.use('/api/users', usersRouter);
 
