@@ -10,6 +10,7 @@ This is a Node.js + Express + MySQL backend project where I’m building an Inve
 - User CRUD (with hashed passwords, validations, and role field)  
 - MySQL database connection  
 - Organized MVC structure  
+- Authentication (JWT)  
 
 ---
 
@@ -25,7 +26,6 @@ This is a Node.js + Express + MySQL backend project where I’m building an Inve
 
 ## 📌 Upcoming features
 
-- Authentication (JWT)  
 - Role-based authorization  
 - Order system + stock movement  
 - Deployment  
