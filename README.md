@@ -11,6 +11,8 @@ This is a Node.js + Express + MySQL backend project where I’m building an Inve
 - MySQL database connection  
 - Organized MVC structure  
 - Authentication (JWT)  
+- Role-based authorization  
+- Order system + stock movement  
 
 ---
 
@@ -26,8 +28,6 @@ This is a Node.js + Express + MySQL backend project where I’m building an Inve
 
 ## 📌 Upcoming features
 
-- Role-based authorization  
-- Order system + stock movement  
 - Deployment  
 
 ---

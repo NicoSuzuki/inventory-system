@@ -75,7 +75,8 @@ exports.createOrder = async (req, res) => {
       enrichedItems.push({
         product_id: productId,
         quantity,
-        price_at_purchase: priceAtPurchase
+        price_at_purchase: priceAtPurchase,
+        available_stock: product.stock
       });
     }
 
@@ -94,10 +95,18 @@ exports.createOrder = async (req, res) => {
     }
 
     for (const item of enrichedItems) {
-      await connection.query(
-        'UPDATE products SET stock = stock - ? WHERE id_products = ?',
-        [item.quantity, item.product_id]
+      const [updateResult] = await connection.query(
+        'UPDATE products SET stock = stock - ? WHERE id_products = ? AND stock >= ?',
+        [item.quantity, item.product_id, item.quantity]
       );
+
+      if (updateResult.affectedRows === 0) {
+        await connection.rollback();
+        return res.status(409).json({
+        error: `Insufficient stock for product ${item.product_id}`,
+        available: item.available_stock
+        });
+      }
     }
 
     await connection.commit();
@@ -130,7 +139,70 @@ exports.createOrder = async (req, res) => {
 };
 
 exports.getAllOrders = async (req, res) => {
-  return res.status(501).json({ error: 'Not implemented yet' });
+  try {
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+      const offset = (page - 1) * limit;
+
+      const status = req.query.status?.trim();
+      const userId = req.query.user_id ? parseInt(req.query.user_id, 10) : null;
+
+      const where = [];
+      const params = [];
+
+      if (status) {
+        where.push('o.status = ?');
+        params.push(status);
+      }
+      if (userId && !Number.isNaN(userId)) {
+        where.push('o.user_id = ?');
+        params.push(userId);
+      }
+
+      const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+      const [countRows] = await db.query(
+        `SELECT COUNT(*) AS total
+        FROM orders o
+        ${whereSql}`,
+        params
+      );
+
+      const totalRows = countRows[0]?.total ?? 0;
+      const totalPages = Math.ceil(totalRows / limit);
+
+      const [rows] = await db.query(
+        `SELECT
+          o.id_orders,
+          o.user_id,
+          o.status,
+          o.total,
+          o.created_at,
+          u.name AS user_name,
+          u.email AS user_email
+        FROM orders o
+        JOIN users u ON u.id_users = o.user_id
+        ${whereSql}
+        ORDER BY o.created_at DESC
+        LIMIT ? OFFSET ?`,
+        [...params, limit, offset]
+      );
+
+      return res.status(200).json({
+        meta: {
+          page,
+          limit,
+          totalRows,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1
+        },
+        data: rows
+      });
+    } catch (error) {
+      console.error('Error fetching all orders:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
 };
 
 exports.getMyOrders = async (req, res) => {
