@@ -206,9 +206,119 @@ exports.getAllOrders = async (req, res) => {
 };
 
 exports.getMyOrders = async (req, res) => {
-  return res.status(501).json({ error: 'Not implemented yet' });
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 50);
+    const offset = (page - 1) * limit;
+
+    const [countRows] = await db.query(
+      `SELECT COUNT(*) AS total
+       FROM orders
+       WHERE user_id = ?`,
+      [userId]
+    );
+
+    const totalRows = countRows[0]?.total ?? 0;
+    const totalPages = Math.ceil(totalRows / limit);
+
+    const [rows] = await db.query(
+      `SELECT
+         id_orders,
+         status,
+         total,
+         created_at
+       FROM orders
+       WHERE user_id = ?
+       ORDER BY created_at DESC
+       LIMIT ? OFFSET ?`,
+      [userId, limit, offset]
+    );
+
+    return res.status(200).json({
+      meta: {
+        page,
+        limit,
+        totalRows,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+      },
+      data: rows
+    });
+  } catch (error) {
+    console.error('Error fetching my orders:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 };
 
 exports.getOrderById = async (req, res) => {
-  return res.status(501).json({ error: 'Not implemented yet' });
+try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+    const orderId = parseInt(req.params.id, 10);
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    if (Number.isNaN(orderId) || orderId <= 0) {
+      return res.status(400).json({ error: 'Invalid order id' });
+    }
+
+    const [orderRows] = await db.query(
+      `SELECT
+         o.id_orders,
+         o.user_id,
+         o.status,
+         o.total,
+         o.created_at,
+         u.name AS user_name,
+         u.email AS user_email
+       FROM orders o
+       JOIN users u ON u.id_users = o.user_id
+       WHERE o.id_orders = ?`,
+      [orderId]
+    );
+
+    if (orderRows.length === 0) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const order = orderRows[0];
+
+    if (role !== 'admin' && order.user_id !== userId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const [itemRows] = await db.query(
+      `SELECT
+         oi.id_order_items,
+         oi.product_id,
+         p.name AS product_name,
+         oi.quantity,
+         oi.price_at_purchase,
+         (oi.quantity * oi.price_at_purchase) AS line_total
+       FROM order_items oi
+       JOIN products p ON p.id_products = oi.product_id
+       WHERE oi.order_id = ?
+       ORDER BY oi.id_order_items ASC`,
+      [orderId]
+    );
+
+    return res.status(200).json({
+      data: {
+        ...order,
+        items: itemRows
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching order by id:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 };
