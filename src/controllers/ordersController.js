@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { recordOrderStatusChange } = require('../services/orderHistoryService');
 
 /**
  * POST /api/orders
@@ -25,6 +26,9 @@ exports.createOrder = async (req, res) => {
       return res.status(400).json({ error: 'Items must be a non-empty array' });
     }
 
+    // Group duplicated items
+    const groupedItemsMap = {};
+
     for (const item of items) {
       const productId = parseInt(item.product_id, 10);
       const quantity = parseInt(item.quantity, 10);
@@ -36,7 +40,18 @@ exports.createOrder = async (req, res) => {
       if (Number.isNaN(quantity) || quantity <= 0) {
         return res.status(400).json({ error: 'Invalid quantity in items' });
       }
+
+      if (!groupedItemsMap[productId]) {
+        groupedItemsMap[productId] = {
+          product_id: productId,
+          quantity: 0
+        };
+      }
+
+      groupedItemsMap[productId].quantity += quantity;
     }
+
+    const groupedItems = Object.values(groupedItemsMap);
 
     connection = await db.getConnection();
     await connection.beginTransaction();
@@ -44,7 +59,7 @@ exports.createOrder = async (req, res) => {
     const enrichedItems = [];
     let total = 0;
 
-    for (const item of items) {
+    for (const item of groupedItems) {
       const productId = parseInt(item.product_id, 10);
       const quantity = parseInt(item.quantity, 10);
 
@@ -87,6 +102,14 @@ exports.createOrder = async (req, res) => {
 
     const orderId = orderResult.insertId;
 
+    await recordOrderStatusChange(connection, {
+      orderId,
+      oldStatus: 'created',
+      newStatus: 'pending',
+      changedBy: userId,
+      note: 'Order created'
+    });
+
     for (const item of enrichedItems) {
       await connection.query(
         'INSERT INTO order_items (order_id, product_id, quantity, price_at_purchase) VALUES (?, ?, ?, ?)',
@@ -111,6 +134,11 @@ exports.createOrder = async (req, res) => {
 
     await connection.commit();
 
+    const responseItems = enrichedItems.map(
+      ({ available_stock, ...rest }) => rest
+    );
+
+
     res.status(201).json({
       message: 'Order created',
       data: {
@@ -118,7 +146,7 @@ exports.createOrder = async (req, res) => {
         user_id: userId,
         status: 'pending',
         total,
-        items: enrichedItems
+        items: responseItems
       }
     });
   } catch (error) {
@@ -319,6 +347,224 @@ try {
     });
   } catch (error) {
     console.error('Error fetching order by id:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.cancelOrder = async (req, res) => {
+  let connection;
+
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+    const orderId = parseInt(req.params.id, 10);
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    if (Number.isNaN(orderId) || orderId <= 0) {
+      return res.status(400).json({ error: 'Invalid order id' });
+    }
+
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    const [orderRows] = await connection.query(
+      `SELECT id_orders, user_id, status
+       FROM orders
+       WHERE id_orders = ?`,
+      [orderId]
+    );
+
+
+    if (orderRows.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const order = orderRows[0];
+
+
+    if (role !== 'admin' && order.user_id !== userId) {
+      await connection.rollback();
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+
+    if (order.status !== 'pending') {
+      await connection.rollback();
+      return res.status(409).json({
+        error: 'Only pending orders can be cancelled'
+      });
+    }
+
+
+    const [items] = await connection.query(
+      `SELECT product_id, quantity
+       FROM order_items
+       WHERE order_id = ?`,
+      [orderId]
+    );
+
+
+    for (const item of items) {
+      await connection.query(
+        `UPDATE products
+         SET stock = stock + ?
+         WHERE id_products = ?`,
+        [item.quantity, item.product_id]
+      );
+    }
+
+
+    await connection.query(
+      `UPDATE orders
+       SET status = 'cancelled'
+       WHERE id_orders = ?`,
+      [orderId]
+    );
+
+    await recordOrderStatusChange(connection, {
+      orderId,
+      oldStatus: 'pending',
+      newStatus: 'cancelled',
+      changedBy: userId,
+      note: 'Order cancelled'
+    });
+
+    await connection.commit();
+
+    return res.status(200).json({
+      message: 'Order cancelled successfully'
+    });
+  } catch (error) {
+    console.error('Error cancelling order:', error);
+
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch (_) {}
+    }
+
+    return res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    if (connection) connection.release();
+  }
+};
+
+exports.completeOrder = async (req, res) => {
+  let connection;
+
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+    const orderId = parseInt(req.params.id, 10);
+
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    if (role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+    if (Number.isNaN(orderId) || orderId <= 0) {
+      return res.status(400).json({ error: 'Invalid order id' });
+    }
+
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    const [orderRows] = await connection.query(
+      `SELECT id_orders, status
+       FROM orders
+       WHERE id_orders = ?
+       FOR UPDATE`,
+      [orderId]
+    );
+
+    if (orderRows.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const order = orderRows[0];
+
+    if (order.status !== 'pending') {
+      await connection.rollback();
+      return res.status(409).json({
+        error: 'Only pending orders can be completed',
+        currentStatus: order.status
+      });
+    }
+
+    await connection.query(
+      `UPDATE orders
+       SET status = 'completed'
+       WHERE id_orders = ?`,
+      [orderId]
+    );
+
+    await recordOrderStatusChange(connection, {
+      orderId,
+      oldStatus: 'pending',
+      newStatus: 'completed',
+      changedBy: userId,
+      note: 'Order completed'
+    });
+
+    await connection.commit();
+
+    return res.status(200).json({ message: 'Order marked as completed' });
+  } catch (error) {
+    console.error('Error completing order:', error);
+    if (connection) {
+      try { await connection.rollback(); } catch (_) {}
+    }
+    return res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    if (connection) connection.release();
+  }
+};
+
+exports.getOrderHistory = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+    const orderId = parseInt(req.params.id, 10);
+
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    if (Number.isNaN(orderId) || orderId <= 0) {
+      return res.status(400).json({ error: 'Invalid order id' });
+    }
+
+    const [orderRows] = await db.query(
+      `SELECT id_orders, user_id FROM orders WHERE id_orders = ?`,
+      [orderId]
+    );
+
+    if (orderRows.length === 0) return res.status(404).json({ error: 'Order not found' });
+
+    const order = orderRows[0];
+    if (role !== 'admin' && order.user_id !== userId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const [rows] = await db.query(
+      `SELECT
+         h.id_order_history,
+         h.old_status,
+         h.new_status,
+         h.note,
+         h.changed_at,
+         h.changed_by,
+         u.name AS changed_by_name,
+         u.email AS changed_by_email
+       FROM order_history h
+       JOIN users u ON u.id_users = h.changed_by
+       WHERE h.order_id = ?
+       ORDER BY h.changed_at ASC`,
+      [orderId]
+    );
+
+    return res.status(200).json({ data: rows });
+  } catch (error) {
+    console.error('Error fetching order history:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
