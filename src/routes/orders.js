@@ -13,6 +13,9 @@ router.get('/', authenticateToken, authorizeRole('admin'), ordersController.getA
 // GET /api/orders/my -> list my orders (logged-in user)
 router.get('/my', authenticateToken, ordersController.getMyOrders);
 
+// GET /api/orders/:id/history (admin or owner)
+router.get('/:id/history', authenticateToken, ordersController.getOrderHistory);
+
 // GET /api/orders/:id -> get order by id (admin or owner)
 router.get('/:id', authenticateToken, ordersController.getOrderById);
 
@@ -21,9 +24,6 @@ router.put('/:id/cancel', authenticateToken, ordersController.cancelOrder);
 
 // PUT /api/orders/:id/complete -> complete order (admin only)
 router.put('/:id/complete', authenticateToken, authorizeRole('admin'), ordersController.completeOrder);
-
-// GET /api/orders/:id/history (admin or owner)
-router.get('/:id/history', authenticateToken, ordersController.getOrderHistory);
 
 
 

@@ -64,7 +64,7 @@ exports.createOrder = async (req, res) => {
       const quantity = parseInt(item.quantity, 10);
 
       const [productRows] = await connection.query(
-        'SELECT id_products, name, price, stock FROM products WHERE id_products = ?',
+        'SELECT id_products, name, price, stock FROM products WHERE id_products = ? AND deleted_at IS NULL FOR UPDATE',
         [productId]
       );
 
@@ -104,7 +104,7 @@ exports.createOrder = async (req, res) => {
 
     await recordOrderStatusChange(connection, {
       orderId,
-      oldStatus: 'created',
+      oldStatus: null,
       newStatus: 'pending',
       changedBy: userId,
       note: 'Order created'

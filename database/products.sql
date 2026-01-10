@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS `products` (
   `description` VARCHAR(255) NULL,
   `price` FLOAT NOT NULL,
   `stock` INT NOT NULL,
+  `deleted_at` DATETIME NULL,
   `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id_products`)
+  PRIMARY KEY (`id_products`),
+  INDEX `idx_products_deleted_at` (`deleted_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -1,14 +1,12 @@
 const db = require('../config/db');
 
-/**
- * GET /api/products
- */
+// GET /api/products
 exports.getAllProducts = async (req, res) => {
   try {
     const limit = req.query.limit ? parseInt(req.query.limit, 10) : null;
     const offset = req.query.offset ? parseInt(req.query.offset, 10) : null;
 
-    let query = 'SELECT * FROM products';
+    let query = 'SELECT * FROM products WHERE deleted_at IS NULL';
     const params = [];
 
     if (limit !== null) {
@@ -28,9 +26,7 @@ exports.getAllProducts = async (req, res) => {
   }
 };
 
-/**
- * GET /api/products/:id
- */
+// GET /api/products/:id
 exports.getProductById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -40,7 +36,7 @@ exports.getProductById = async (req, res) => {
     }
 
     const [rows] = await db.query(
-      'SELECT * FROM products WHERE id_products = ?',
+      'SELECT * FROM products WHERE id_products = ? AND deleted_at IS NULL',
       [productId]
     );
 
@@ -55,9 +51,7 @@ exports.getProductById = async (req, res) => {
   }
 };
 
-/**
- * POST /api/products
- */
+// POST /api/products
 exports.createProduct = async (req, res) => {
   try {
     const { name, description = null, price, stock } = req.body;
@@ -91,9 +85,7 @@ exports.createProduct = async (req, res) => {
   }
 };
 
-/**
- * PUT /api/products/:id
- */
+// PUT /api/products/:id
 exports.updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
@@ -104,7 +96,7 @@ exports.updateProduct = async (req, res) => {
 
     const { name, description, price, stock } = req.body;
 
-    const [exists] = await db.query('SELECT * FROM products WHERE id_products = ?', [productId]);
+    const [exists] = await db.query('SELECT * FROM products WHERE id_products = ? AND deleted_at IS NULL', [productId]);
     if (exists.length === 0) {
       return res.status(404).json({ error: 'Product not found' });
     }
@@ -147,7 +139,7 @@ exports.updateProduct = async (req, res) => {
       return res.status(400).json({ error: 'No fields provided to update' });
     }
 
-    const sql = `UPDATE products SET ${fields.join(', ')} WHERE id_products = ?`;
+    const sql = `UPDATE products SET ${fields.join(', ')} WHERE id_products = ? AND deleted_at IS NULL`;
     params.push(productId);
 
     const [result] = await db.query(sql, params);
@@ -162,29 +154,53 @@ exports.updateProduct = async (req, res) => {
   }
 };
 
-/**
- * DELETE /api/products/:id
- */
+// DELETE /api/products/:id
 exports.deleteProduct = async (req, res) => {
   try {
     const { id } = req.params;
     const productId = parseInt(id, 10);
+
     if (Number.isNaN(productId)) {
       return res.status(400).json({ error: 'Invalid product id' });
     }
 
     const [result] = await db.query(
-      'DELETE FROM products WHERE id_products = ?',
+      'UPDATE products SET deleted_at = NOW() WHERE id_products = ? AND deleted_at IS NULL',
       [productId]
     );
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Product not found' });
+      return res.status(404).json({ error: 'Product not found (or already deleted)' });
     }
 
-    res.status(200).json({ message: 'Product deleted' });
+    res.status(200).json({ message: 'Product soft deleted' });
   } catch (error) {
-    console.error('Error deleting product:', error);
+    console.error('Error soft deleting product:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.restoreProduct = async (req, res) => {
+  try {
+    const productId = parseInt(req.params.id, 10);
+    if (Number.isNaN(productId) || productId <= 0) {
+      return res.status(400).json({ error: 'Invalid product id' });
+    }
+
+    const [result] = await db.query(
+      `UPDATE products
+       SET deleted_at = NULL
+       WHERE id_products = ? AND deleted_at IS NOT NULL`,
+      [productId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Product not found (or not deleted)' });
+    }
+
+    return res.status(200).json({ message: 'Product restored' });
+  } catch (error) {
+    console.error('Error restoring product:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 };
