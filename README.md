@@ -11,6 +11,8 @@ This project is part of my **#SundayCodingJourney**, where I consistently build 
 ### Products
 - Full Product CRUD (create, read, update, delete)
 - Stock management
+- Soft delete support (deleted_at)
+- Soft-deleted products are excluded from reads and updates
 - Admin-only access for create/update/delete
 
 ### Users
@@ -22,11 +24,14 @@ This project is part of my **#SundayCodingJourney**, where I consistently build 
 ### Orders
 - Create orders with multiple items
 - MySQL transactions to ensure data consistency
-- Atomic stock updates to avoid race conditions
+- Row-level locking (SELECT ... FOR UPDATE) to prevent race conditions
+- Atomic stock updates
 - Order listing with pagination
 - User-specific orders (`My Orders`)
-- Order details with permission control
-- Role-based access (admin vs user)
+- Order details with permission control (admin vs user)
+- Order cancellation with automatic stock rollback
+- Order completion (admin only)
+- Order status history (audit log)
 
 ### Security
 - JWT authentication middleware
@@ -50,6 +55,7 @@ This project is part of my **#SundayCodingJourney**, where I consistently build 
 ## 🧩 Architecture
 
 - MVC pattern (Controllers, Routes, Models)
+- Clear separation of concerns
 - Service-oriented business logic
 - Secure SQL queries (prepared statements)
 - Transaction-based operations for critical flows
@@ -67,6 +73,14 @@ This project is part of my **#SundayCodingJourney**, where I consistently build 
 - `DELETE /api/products/:id` → Admin only
 
 ---
+## 🧠 Key Design Decisions
+
+- Soft delete is used for products to preserve historical data and avoid breaking existing orders
+- Orders use transactions and row-level locks to ensure consistency under concurrent requests
+- Order status changes are fully audited via an order_history table
+- Explicit endpoints (/cancel, /complete) were chosen over generic status updates for clarity and maintainability
+
+---
 
 ## 📈 Project Goals
 
@@ -77,11 +91,16 @@ This project is part of my **#SundayCodingJourney**, where I consistently build 
 
 ---
 
-## 🚧 Upcoming Features
+## ✅ Project Status
 
-- Order cancellation and stock rollback
-- Order status history (audit log)
-- Deployment
-- Automated testing
+This project is considered feature-complete and stable.
+Future improvements (testing, deployment, monitoring) may be added separately, but the core system is finished.
+
+---
+
+## 📎 Notes
+
+This repository focuses exclusively on backend logic.
+No frontend is included.
 
 ---
