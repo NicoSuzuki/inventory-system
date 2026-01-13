@@ -53,3 +53,63 @@ exports.login = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+exports.register = async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    // Basic validation
+    if (!name || typeof name !== 'string' || name.trim().length < 2) {
+      return res.status(400).json({ error: 'Name must be at least 2 characters' });
+    }
+
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    if (!password || typeof password !== 'string' || password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+
+    // Check existing user
+    const [existing] = await db.query(
+      'SELECT id_users FROM users WHERE email = ? LIMIT 1',
+      [normalizedEmail]
+    );
+
+    if (existing.length > 0) {
+      return res.status(409).json({ error: 'Email already in use' });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Default role
+    const role = 'user';
+
+    const [result] = await db.query(
+      'INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)',
+      [name.trim(), normalizedEmail, hashedPassword, role]
+    );
+
+    return res.status(201).json({
+      message: 'User registered successfully',
+      data: {
+        id_users: result.insertId,
+        name: name.trim(),
+        email: normalizedEmail,
+        role
+      }
+    });
+  } catch (error) {
+    console.error('Error registering user:', error);
+
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};

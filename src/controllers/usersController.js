@@ -1,9 +1,7 @@
 const db = require('../config/db');
 const bcrypt = require('bcryptjs');
 
-/**
- * GET /api/users
- */
+// GET /api/users
 exports.getAllUsers = async (req, res) => {
   try {
     const [rows] = await db.query(
@@ -16,9 +14,7 @@ exports.getAllUsers = async (req, res) => {
   }
 };
 
-/**
- * GET /api/users/:id
- */
+// GET /api/users/:id
 exports.getUserById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -44,60 +40,7 @@ exports.getUserById = async (req, res) => {
   }
 };
 
-/**
- * POST /api/users
- */
-exports.createUser = async (req, res) => {
-  try {
-    const { name, role, email, password } = req.body;
-
-    if (!name || typeof name !== 'string' || name.trim() === '') {
-      return res.status(400).json({ error: 'Name is required' });
-    }
-
-    if (!role || typeof role !== 'string' || role.trim() === '') {
-      return res.status(400).json({ error: 'Role is required' });
-    }
-
-    if (!email || typeof email !== 'string' || email.trim() === '') {
-      return res.status(400).json({ error: 'Email is required' });
-    }
-
-    if (!password || typeof password !== 'string' || password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters long' });
-    }
-
-    // Hashing password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const [result] = await db.query(
-      'INSERT INTO users (name, role, email, password) VALUES (?, ?, ?, ?)',
-      [name.trim(), role.trim(), email.trim(), hashedPassword]
-    );
-
-    res.status(201).json({
-      message: 'User created',
-      data: {
-        id: result.insertId,
-        name: name.trim(),
-        role: role.trim(),
-        email: email.trim()
-      }
-    });
-  } catch (error) {
-    console.error('Error creating user:', error);
-
-    if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(409).json({ error: 'Email already in use' });
-    }
-
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};
-
-/**
- * PUT /api/users/:id
- */
+// PUT /api/users/:id
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
@@ -182,9 +125,7 @@ exports.updateUser = async (req, res) => {
   }
 };
 
-/**
- * DELETE /api/users/:id
- */
+// DELETE /api/users/:id
 exports.deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
